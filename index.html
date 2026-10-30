@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>치이카와 뽑기</title>
+<style>
+:root {
+  --bg: #fdf3f1; --stage: #fffaf8; --ink: #4a3b42; --muted: #8a7a82;
+  --accent: #f08aa6; --accent-ink: #ffffff; --line: #f1d9d9;
+  --font: "Jua", "Gowun Dodum", "Malgun Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #2a2127; --stage: #342a31; --ink: #f6e8ec; --muted: #bda9b1; --accent-ink: #2a2127; --line: #4a3b43; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--font); padding: 24px 16px; display: flex; justify-content: center; }
+main { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-weight: 400; font-size: 28px; margin: 0; text-align: center; }
+.stage { position: relative; height: 420px; overflow: hidden; border-radius: 28px; background: var(--stage); border: 2px solid var(--line); }
+.sprite { position: absolute; left: 0; top: 0; width: 56px; height: 56px; opacity: .85; will-change: transform; }
+.sprite img, .big img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; pointer-events: none; }
+.big { width: 170px; height: 170px; background: var(--bg); border-radius: 50%; border: 2px solid var(--line); padding: 14px; box-sizing: content-box; }
+.spinning .big { animation: wob .12s ease-in-out infinite alternate; }
+.done .big { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
+@keyframes wob { from { transform: rotate(-5deg) scale(1); } to { transform: rotate(5deg) scale(1.04); } }
+@keyframes pop { from { transform: scale(.7); } to { transform: scale(1); } }
+.name { font-size: 32px; min-height: 40px; }
+.line { color: var(--muted); font-size: 16px; line-height: 1.5; min-height: 48px; max-width: 30ch; }
+.spinning .name, .spinning .line { visibility: hidden; }
+button { font-family: var(--font); font-size: 24px; border: 0; cursor: pointer; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 14px 24px; }
+button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.note { margin: 0; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .spinning .big, .done .big { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>나는 무슨 캐릭터?</h1>
+  <div class="stage spinning" id="stage">
+    <div id="sprites"></div>
+    <div class="center">
+      <div class="big"><img id="big" alt=""></div>
+      <div class="name" id="name" aria-live="polite"></div>
+    </div>
+  </div>
+  <button id="btn" type="button">선택!</button>
+  <p class="note">0.03초마다 캐릭터가 바뀌어요. 스페이스바로도 멈출 수 있어요.<br>캐릭터는 characters.js, 이미지는 images 폴더에서 관리합니다.</p>
+</main>
+
+<script src="characters.js"></script>
+<script>
+(function () {
+  var C = window.CHARACTERS, ink = "#4a3b42";
+
+  // 이미지가 없을 때 쓰는 단순한 자리표시 그림: 색 원 + 이름 첫 글자
+  function fallback(c) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+      '<circle cx="50" cy="50" r="40" fill="' + c.body + '" stroke="' + ink + '" stroke-width="2.5"/>' +
+      '<text x="50" y="64" text-anchor="middle" font-size="40" font-family="sans-serif" fill="' + ink + '">' + c.n.charAt(0) + '</text></svg>';
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  }
+  // 이미지가 있으면 images/<id>.<ext>, 없으면 그림으로 대체
+  var src = C.map(fallback);
+  C.forEach(function (c, i) {
+    var url = "images/" + c.id + "." + (c.ext || "png");
+    var im = new Image();
+    im.onload = function () { src[i] = url; };
+    im.src = url;
+  });
+
+  var stage = document.getElementById("stage"), spritesEl = document.getElementById("sprites");
+  var big = document.getElementById("big"), nameEl = document.getElementById("name"), btn = document.getElementById("btn");
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var S = [];
+  for (var i = 0; i < 14; i++) {
+    var el = document.createElement("div"); el.className = "sprite";
+    var im = document.createElement("img"); im.alt = ""; el.appendChild(im); spritesEl.appendChild(el);
+    S.push({ el: el, img: im, k: i % C.length, x: Math.random() * 300, y: Math.random() * 360,
+      vx: (Math.random() * 1.6 + .6) * (Math.random() < .5 ? -1 : 1), vy: (Math.random() * 1.6 + .6) * (Math.random() < .5 ? -1 : 1) });
+    im.src = src[S[i].k];
+  }
+
+  var spinning = true, current = 0, timer = null;
+  function setBig(k) { current = k; big.src = src[k]; }
+
+  function tick() {
+    var k = Math.floor(Math.random() * C.length);
+    if (k === current && C.length > 1) k = (k + 1) % C.length;
+    setBig(k);
+    for (var i = 0; i < S.length; i++) { S[i].k = (S[i].k + 1 + (i % 3)) % C.length; S[i].img.src = src[S[i].k]; }
+  }
+  function frame() {
+    var w = stage.clientWidth - 56, h = stage.clientHeight - 56;
+    for (var i = 0; i < S.length; i++) {
+      var s = S[i];
+      if (!reduce) {
+        var sp = spinning ? 1 : .35; s.x += s.vx * sp; s.y += s.vy * sp;
+        if (s.x < 0 || s.x > w) { s.vx = -s.vx; s.x = Math.max(0, Math.min(w, s.x)); }
+        if (s.y < 0 || s.y > h) { s.vy = -s.vy; s.y = Math.max(0, Math.min(h, s.y)); }
+      }
+      s.el.style.transform = "translate(" + s.x + "px," + s.y + "px)";
+    }
+    requestAnimationFrame(frame);
+  }
+  function start() {
+    spinning = true; stage.className = "stage spinning"; btn.textContent = "선택!";
+    nameEl.textContent = ""; timer = setInterval(tick, 30);
+  }
+  function stop() {
+    spinning = false; clearInterval(timer);
+    stage.className = "stage done"; nameEl.textContent = C[current].n; btn.textContent = "다시 뽑기";
+    big.src = src[current];
+  }
+  function toggle() { spinning ? stop() : start(); }
+
+  btn.addEventListener("click", toggle);
+  document.addEventListener("keydown", function (e) { if (e.code === "Space" && e.target !== btn) { e.preventDefault(); toggle(); } });
+  setBig(0); start(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
