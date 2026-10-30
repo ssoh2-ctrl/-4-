@@ -112,9 +112,16 @@ button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
     nameEl.textContent = ""; timer = setInterval(tick, 30);
   }
   function stop() {
-    spinning = false; clearInterval(timer);
+    spinning = false; clearInterval(timer); current = pickWeighted();
     stage.className = "stage done"; nameEl.textContent = C[current].n; btn.textContent = "다시 뽑기";
     big.src = src[current];
+  }
+  function pickWeighted() {
+    var t = 0, i;
+    for (i = 0; i < C.length; i++) t += (C[i].w || 1);
+    var r = Math.random() * t;
+    for (i = 0; i < C.length; i++) { r -= (C[i].w || 1); if (r < 0) return i; }
+    return C.length - 1;
   }
   function toggle() { spinning ? stop() : start(); }
 
